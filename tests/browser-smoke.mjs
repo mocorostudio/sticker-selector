@@ -1,5 +1,4 @@
 import { chromium } from 'playwright';
-import { readFile } from 'node:fs/promises';
 const pages=['sticker-selector-v9-nine-reject-test.html','sticker-selector-v9-resume-test.html'];
 const browser=await chromium.launch({headless:true});
 let errors=0;
@@ -7,18 +6,27 @@ for(const file of pages){
  const page=await browser.newPage();
  const issues=[];
  page.on('pageerror',e=>issues.push(e.message));
- await page.goto('file://'+process.cwd()+'/'+file);
- await page.waitForTimeout(800);
- const details=await page.evaluate(()=>({
-   title:document.title,
-   list:!!document.querySelector('#list'),
-   upload:!!document.querySelector('#files'),
-   resume:document.querySelector('#oneStep')?.textContent?.trim()
- }));
- if(issues.length||!details.list||!details.upload||!details.resume){
-   console.error('FAIL',file,details,issues);errors++;
- }else console.log('PASS',file,details.resume);
- await page.close();
+ try{
+  await page.goto('file://'+process.cwd()+'/'+file);
+  await page.locator('#status').waitFor();
+  await page.waitForTimeout(400);
+  if(await page.locator('#files').count()!==1)throw Error('PNG input missing');
+  if(await page.locator('#oneStep').count()!==1)throw Error('Sync button missing');
+  // A harmless generated one-pixel PNG exercises import, rating and persistence.
+  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRfkAAAAASUVORK5CYII=','base64');
+  await page.locator('#files').setInputFiles({name:'ui-smoke.png',mimeType:'image/png',buffer:png});
+  await page.locator('#list .card').first().waitFor();
+  await page.locator('#list .card').first().locator('input[value="h"]').check({force:true});
+  const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('sticker-selector-v9')));
+  if(!state.items.some(x=>x.name==='ui-smoke.png'&&x.rating==='h'&&x.touched))throw Error('Selection was not persisted');
+  await page.reload();
+  await page.locator('#list .card').first().waitFor();
+  const after=await page.evaluate(()=>JSON.parse(localStorage.getItem('sticker-selector-v9')));
+  if(!after.items.some(x=>x.name==='ui-smoke.png'&&x.rating==='h'&&x.touched))throw Error('Selection disappeared on reload');
+  if(issues.length)throw Error('Browser exceptions: '+issues.join('; '));
+  console.log('PASS',file,'load/import/rating/reload');
+ }catch(e){console.error('FAIL',file,e.message,issues);errors++}
+ finally{await page.close()}
 }
 await browser.close();
-if(errors)process.exit(1);
+process.exitCode=errors?1:0;
