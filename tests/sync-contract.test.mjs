@@ -17,9 +17,9 @@ test('network failure then resume without duplicates',async()=>{
  assert.ok(rows.every(x=>x.history.length===1));
  const third=await applySelections(rows,choices,commit);assert.equal(third.saved.length,0);
 });
-test('rejection keeps record and routes to reject',async()=>{
+test('rejection keeps record and PNG in current folder',async()=>{
  const rows=fixture();await applySelections(rows,[{candidate:'TEST06',imageId:'png-6',rating:'x'}],commit);
- assert.equal(rows.length,7);assert.equal(rows[0].folder,'reject');
+ assert.equal(rows.length,7);assert.equal(rows[0].folder,'pending');
 });
 test('duplicate choice rejected rather than double-committed',async()=>{
  const rows=fixture(),c={candidate:'TEST06',imageId:'png-6',rating:'o'};

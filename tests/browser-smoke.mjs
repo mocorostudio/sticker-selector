@@ -1,32 +1,60 @@
-import { chromium } from 'playwright';
-import { mkdir } from 'node:fs/promises';
-const pages=['sticker-selector-v9-nine-reject-test.html','sticker-selector-v9-resume-test.html'];
-const browser=await chromium.launch({headless:true});
-let errors=0;
-for(const file of pages){
- const page=await browser.newPage();
- const issues=[];
- page.on('pageerror',e=>issues.push(e.message));
+import { chromium,webkit } from 'playwright';
+import assert from 'node:assert/strict';
+import {mkdir} from 'node:fs/promises';
+import {startServer} from './server.mjs';
+import {png} from './mock-drive.mjs';
+const service=await startServer();
+let failed=0,passed=0;
+async function scenario(browser,name,fn){service.reset();const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ // Network allowlist: tests cannot contact Google or any external host.
+ await context.route('**/*',r=>new URL(r.request().url()).origin===service.url?r.continue():r.abort());
+ page.on('dialog',d=>d.accept());
+ try{await page.goto(service.url+'/?mock=1');await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('表示'));await fn(page);assert.deepEqual(errors,[]);console.log('PASS',name);passed++}
+ catch(e){failed++;console.error('FAIL',name,e);await mkdir('test-results',{recursive:true});await page.screenshot({path:'test-results/'+name.replaceAll(/[^\w-]/g,'_')+'.png',fullPage:true}).catch(()=>{})}
+ finally{await context.close()}}
+try{for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]){
+ const browser=await type.launch({headless:true});
  try{
-  await page.goto('file://'+process.cwd()+'/'+file);
-  await page.waitForFunction(()=>document.querySelector('#status')?.textContent?.includes('表示'));
-  if(await page.locator('#files').count()!==1)throw Error('PNG input missing');
-  if(await page.locator('#oneStep').count()!==1)throw Error('Sync button missing');
-  // A harmless generated one-pixel PNG exercises import, rating and persistence.
-  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRfkAAAAASUVORK5CYII=','base64');
-  await page.locator('#files').setInputFiles({name:'ui-smoke.png',mimeType:'image/png',buffer:png});
-  await page.locator('#list .card').first().waitFor();
-  await page.locator('#list .card').first().locator('.choices label').nth(1).click();
-  const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('sticker-selector-v9')));
-  if(!state.items.some(x=>x.name==='ui-smoke.png'&&x.rating==='h'&&x.touched))throw Error('Selection was not persisted');
-  await page.reload();
-  await page.locator('#list .card').first().waitFor();
-  const after=await page.evaluate(()=>JSON.parse(localStorage.getItem('sticker-selector-v9')));
-  if(!after.items.some(x=>x.name==='ui-smoke.png'&&x.rating==='h'&&x.touched))throw Error('Selection disappeared on reload');
-  if(issues.length)throw Error('Browser exceptions: '+issues.join('; '));
-  console.log('PASS',file,'load/import/rating/reload');
- }catch(e){console.error('FAIL',file,e.message,issues);errors++;await mkdir('test-results',{recursive:true});await page.screenshot({path:'test-results/'+file+'.png',fullPage:true}).catch(()=>{})}
- finally{await page.close()}
-}
-await browser.close();
-process.exitCode=errors?1:0;
+ await scenario(browser,engine+' phone load/rate/background/reload/sync',async page=>{
+  await page.locator('#loadPending').click();await page.waitForFunction(()=>document.querySelectorAll('.card').length===3);
+  await page.waitForFunction(()=>[...document.querySelectorAll('.stage img')].every(x=>x.complete&&x.naturalWidth>0));
+  assert.equal(service.drive.events.size,0);assert.ok(service.drive.calls.every(c=>!c.startsWith('save:')&&!c.startsWith('move:')));
+  await page.locator('#sync').click();await page.waitForFunction(()=>document.querySelector('#driveStatus').textContent.includes('対象の評価済み画像'));
+  for(let i=0;i<3;i++)await page.locator('.card').nth(i).locator('.choices label').nth(i).click();
+  await page.locator('.comment').first().fill('履歴を保持');
+  await page.locator('.card').first().getByRole('button',{name:'黒',exact:true}).click();
+  await page.locator('.stage img').first().click();assert.ok(await page.locator('#zoom').isVisible());await page.locator('#close').click();
+  assert.equal(service.drive.events.size,0);
+  await page.reload();await page.locator('.card').first().waitFor();
+  assert.equal(await page.locator('.chosen').count(),3);assert.equal(await page.locator('.comment').first().inputValue(),'履歴を保持');assert.match(await page.locator('.stage').first().getAttribute('class'),/black/);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  await page.locator('#sync').click();await page.waitForFunction(()=>document.querySelector('#driveStatus').textContent.includes('同期 3件'));
+  assert.equal(service.drive.events.size,3);assert.deepEqual(service.drive.rows.map(x=>x.folder),['adopt','hold','pending']);
+  await page.locator('#sync').click();await page.waitForFunction(()=>document.querySelector('#driveStatus').textContent.includes('一致 3件'));assert.equal(service.drive.events.size,3);
+  await mkdir('test-results',{recursive:true});await page.screenshot({path:'test-results/'+engine+'-iphone.png',fullPage:true});
+ });
+ await scenario(browser,engine+' partial failure and reload resume',async page=>{
+  await page.locator('#loadPending').click();await page.waitForFunction(()=>document.querySelectorAll('.card').length===3);
+  for(let i=0;i<3;i++)await page.locator('.card').nth(i).locator('.choices label').nth(i).click();
+  service.drive.fail='save:image-0:after';await page.locator('#sync').click();await page.waitForFunction(()=>document.querySelector('#driveStatus').textContent.includes('失敗 1件'));
+  assert.equal(service.drive.rows.filter(x=>x.confirmed).length,3);
+  await page.reload();await page.locator('.card').first().waitFor();await page.locator('#sync').click();await page.waitForFunction(()=>document.querySelector('#driveStatus').textContent.includes('同期 1件／一致 2件／失敗 0件'));
+  assert.equal(service.drive.events.size,3);assert.ok([...service.drive.events.values()].every(x=>x.status==='complete'));
+ });
+ await scenario(browser,engine+' per-image read failure, untested and ambiguous ID',async page=>{
+  service.drive.rows[0].technicalPassed=false;service.drive.files.get('file-1').name='wrong.png';
+  await page.locator('#loadPending').click();await page.waitForFunction(()=>document.querySelector('#driveStatus').textContent.includes('失敗 2件'));assert.equal(await page.locator('.card').count(),1);
+  assert.equal(service.drive.events.size,0);
+ });
+ await scenario(browser,engine+' local PNG failure isolation and duplicate retention',async page=>{
+  await page.locator('summary').click();
+  await page.locator('#files').setInputFiles([{name:'bad.png',mimeType:'image/png',buffer:Buffer.from('invalid')},{name:'good.png',mimeType:'image/png',buffer:png}]);
+  await page.waitForFunction(()=>document.querySelectorAll('.card').length===1);await page.locator('.choices label').nth(1).click();
+  await page.locator('#files').setInputFiles({name:'good.png',mimeType:'image/png',buffer:png});await page.waitForFunction(()=>!document.querySelector('#files').disabled);
+  assert.equal(await page.locator('.card').count(),1);assert.equal(await page.locator('.chosen').textContent(),'△');
+  const before=await page.evaluate(()=>JSON.parse(localStorage.getItem('sticker-selector-v9')).items[0].id);
+  await page.reload();await page.locator('.card').waitFor();const after=await page.evaluate(()=>JSON.parse(localStorage.getItem('sticker-selector-v9')).items[0].id);assert.equal(before,after);
+ });
+ }finally{await browser.close()}
+}}finally{await new Promise(resolve=>service.server.close(resolve))}
+console.log('Browser scenarios: '+passed+' passed, '+failed+' failed');process.exitCode=failed?1:0;
