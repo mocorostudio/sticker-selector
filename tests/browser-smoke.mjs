@@ -6,12 +6,12 @@ import {startServer} from './server.mjs';
 import {png} from './mock-drive.mjs';
 const service=await startServer();
 let failed=0,passed=0;
-async function scenario(browser,name,fn){service.reset();const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+async function scenario(browser,name,fn){service.reset();const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});const page=await context.newPage(),errors=[];page.setDefaultTimeout(10000);const unused=[];page.on('pageerror',e=>errors.push(e.message));
  // Network allowlist: tests cannot contact Google or any external host.
  await context.route('**/*',async r=>{if(r.request().url()==='https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js')return r.fulfill({contentType:'text/javascript',body:await readFile('node_modules/jszip/dist/jszip.min.js')});return new URL(r.request().url()).origin===service.url?r.continue():r.abort()});
  page.on('dialog',d=>d.accept());
  try{await page.goto(service.url+'/?mock=1');await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('表示'));await fn(page);assert.deepEqual(errors,[]);console.log('PASS',name);passed++}
- catch(e){failed++;console.error('FAIL',name,e);await mkdir('test-results',{recursive:true});await page.screenshot({path:'test-results/'+name.replaceAll(/[^\w-]/g,'_')+'.png',fullPage:true}).catch(()=>{})}
+ catch(e){failed++;console.error('FAIL',name,e,'UI:',await page.locator('#error').textContent(),await page.locator('#driveStatus').textContent());await mkdir('test-results',{recursive:true});await page.screenshot({path:'test-results/'+name.replaceAll(/[^\w-]/g,'_')+'.png',fullPage:true}).catch(()=>{})}
  finally{await context.close()}}
 try{for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]){
  const browser=await type.launch({headless:true});

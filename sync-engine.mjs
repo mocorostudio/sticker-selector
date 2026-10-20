@@ -36,7 +36,7 @@ export async function syncSelections(adapter,choices,{confirmed=false,testReject
    }
    // Stable event ID + put-if-absent journal tolerates lost responses and reloads.
    await adapter.begin({id,imageId:record.imageId,candidate:record.candidate,attemptId:record.attemptId,
-    driveFileId:record.driveFileId,previousRating:record.rating||null,rating:choice.rating,comment:choice.comment||'',destination:plan.destination});
+    driveFileId:record.driveFileId,createdAt:new Date().toISOString(),evaluatedAt:choice.evaluatedAt||null,previousComment:record.comment||'',previousFolder:file.folder,previousRating:record.rating||null,rating:choice.rating,comment:choice.comment||'',destination:plan.destination});
    if(!await adapter.event(id))throw Error('開始履歴未確認');
    if(file.folder!==plan.destination)await adapter.move(record.driveFileId,file.folder,plan.destination);
    const after=await adapter.metadata(record.driveFileId);assertIdentity(record,after);
