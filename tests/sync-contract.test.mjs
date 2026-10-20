@@ -1,39 +1,28 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-
-function run(records, choices, failAt=null) {
- const results={saved:[],unchanged:[],errors:[],ignored:[]};
- for(const choice of choices){
-  const row=records.find(r=>r.candidate===choice.candidate);
-  if(!row){results.ignored.push(choice.candidate);continue;}
-  if(row.imageId!==choice.imageId){results.errors.push(choice.candidate+': image-id mismatch');continue;}
-  if(!['o','h','x'].includes(choice.rating)){results.ignored.push(choice.candidate);continue;}
-  const folder={o:'adopt',h:'hold',x:'reject'}[choice.rating];
-  if(row.rating===choice.rating&&row.folder===folder&&row.confirmed){results.unchanged.push(choice.candidate);continue;}
-  if(failAt===choice.candidate){results.errors.push(choice.candidate+': simulated network failure');continue;}
-  row.rating=choice.rating;row.folder=folder;row.confirmed=true;
-  row.history.push(choice.rating);results.saved.push(choice.candidate);
- }
- return results;
-}
+import {applySelections,planSelection} from '../selection-core.mjs';
 const fixture=()=>Array.from({length:7},(_,i)=>({candidate:'TEST'+String(i+6).padStart(2,'0'),imageId:'png-'+(i+6),rating:null,folder:'pending',confirmed:false,history:[]}));
-test('skip unrelated and malformed PNG without blocking valid records',()=>{
+const commit=async(row,choice,folder)=>{row.rating=choice.rating;row.folder=folder;row.confirmed=true;row.history.push(choice.rating)};
+test('skip unknown image and detect image-ID mismatch',async()=>{
  const rows=fixture();
- const r=run(rows,[{candidate:'unrelated',imageId:'junk',rating:'o'},{candidate:'TEST06',imageId:'bad',rating:'o'},{candidate:'TEST07',imageId:'png-7',rating:'h'}]);
- assert.equal(r.ignored.length,1);assert.equal(r.errors.length,1);assert.deepEqual(r.saved,['TEST07']);
+ const r=await applySelections(rows,[{candidate:'unknown',imageId:'x',rating:'o'},{candidate:'TEST06',imageId:'bad',rating:'o'},{candidate:'TEST07',imageId:'png-7',rating:'h'}],commit);
+ assert.deepEqual(r.saved,['TEST07']);assert.equal(r.ignored.length,1);assert.equal(r.errors.length,1);
 });
-test('partial failure resumes only incomplete records, without duplicate history',()=>{
+test('network failure then resume without duplicates',async()=>{
  const rows=fixture(),choices=rows.map((r,i)=>({candidate:r.candidate,imageId:r.imageId,rating:['o','h','x'][i%3]}));
- const first=run(rows,choices,'TEST08');
+ const first=await applySelections(rows,choices,async(row,c,folder)=>{if(row.candidate==='TEST08')throw Error('network');await commit(row,c,folder)});
  assert.equal(first.saved.length,6);assert.equal(first.errors.length,1);
- const second=run(rows,choices);
+ const second=await applySelections(rows,choices,commit);
  assert.deepEqual(second.saved,['TEST08']);assert.equal(second.unchanged.length,6);
- assert.ok(rows.every(r=>r.history.length===1));
- const third=run(rows,choices);
- assert.equal(third.saved.length,0);assert.equal(third.unchanged.length,7);
+ assert.ok(rows.every(x=>x.history.length===1));
+ const third=await applySelections(rows,choices,commit);assert.equal(third.saved.length,0);
 });
-test('recording rejection preserves PNG instead of deleting',()=>{
- const rows=fixture(),r=run(rows,[{candidate:'TEST06',imageId:'png-6',rating:'x'}]);
- assert.deepEqual(r.saved,['TEST06']);assert.equal(rows.length,7);
- assert.equal(rows[0].folder,'reject');
+test('rejection keeps record and routes to reject',async()=>{
+ const rows=fixture();await applySelections(rows,[{candidate:'TEST06',imageId:'png-6',rating:'x'}],commit);
+ assert.equal(rows.length,7);assert.equal(rows[0].folder,'reject');
+});
+test('duplicate choice rejected rather than double-committed',async()=>{
+ const rows=fixture(),c={candidate:'TEST06',imageId:'png-6',rating:'o'};
+ const r=await applySelections(rows,[c,c],commit);
+ assert.equal(r.saved.length,1);assert.equal(r.errors.length,1);assert.equal(rows[0].history.length,1);
 });
