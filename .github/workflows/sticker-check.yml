@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - '*.html'
+      - '*.mjs'
       - 'tests/**'
       - '.github/workflows/sticker-check.yml'
   pull_request:
