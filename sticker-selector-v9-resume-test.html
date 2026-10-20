@@ -369,7 +369,10 @@ $('oneStep').onclick=async()=>{
  const candidate='TEST'+item.name.match(/v9_test_(\d\d)/)[1],index=rows.findIndex((r,i)=>i>0&&r[0]===candidate);
  if(index<1)throw Error('マスター未登録');
  const record=rows[index],row=index+1,id=record[7],target=dest[item.rating];
- if(record[1]!=='未登録'&&record[1]!==item.id)throw Error('画像ID不一致');
+ const core=await import('./selection-core.mjs');
+ const plan=core.planSelection({candidate,imageId:record[1]==='未登録'?item.id:record[1],rating:({['◯']:'o',['△']:'h',['✕']:'x'})[record[3]]||null,folder:({['01_採用予定_TEST']:'adopt',['02_保留_TEST']:'hold',['05_不採用_TEST']:'reject'})[record[8]]||'pending',confirmed:record[4]==='確定'},{candidate,imageId:item.id,rating:item.rating});
+ if(plan.action==='error')throw Error('画像ID不一致');
+ if(plan.action==='ignore')continue;
  const file=await driveMetadata(token,id);
  if(file.name!==item.name||file.mimeType!=='image/png'||file.trashed||file.parents?.length!==1||!names[file.parents[0]])throw Error('実PNG不一致');
  if(record[3]===labels[item.rating]&&record[4]==='確定'&&record[8]===names[target]&&file.parents[0]===target){same++;continue}
