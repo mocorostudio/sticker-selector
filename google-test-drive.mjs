@@ -14,7 +14,7 @@ const copy=x=>JSON.parse(JSON.stringify(x));
 export class GoogleTestDriveAdapter{
  mode='drive-test';
  #token;#fetch;#store;#records=[];#writes=false;
- constructor({getToken,fetchImpl=globalThis.fetch,storage=globalThis.localStorage}={}){if(typeof getToken!=='function')throw Error('Google認証が必要です');this.#token=getToken;this.#fetch=fetchImpl;this.#store=storage}
+ constructor({getToken,fetchImpl=globalThis.fetch,storage=globalThis.localStorage}={}){if(typeof getToken!=='function')throw Error('Google認証が必要です');this.#token=getToken;this.#fetch=(...args)=>fetchImpl(...args);this.#store=storage}
  async #request(url,options={}){
   const u=new URL(url);
   if(u.origin!=='https://www.googleapis.com'&&u.origin!=='https://sheets.googleapis.com')throw Error('許可されていないAPI');
@@ -75,7 +75,7 @@ export class GoogleTestDriveAdapter{
   if(rows[0]?.[0]!=='候補ID'||rows[0]?.[1]!=='画像ID'||rows[0]?.[7]!=='DriveファイルID')throw Error('テストマスター列不一致');
   const records=TEST_DRIVE.fixtures.map(f=>{
    const matches=rows.slice(1).filter(r=>r[0]===f.candidate||r[7]===f.driveFileId);
-   if(matches.length!==1||matches[0][0]!==f.candidate||matches[0][7]!==f.driveFileId||!matches[0][1]?.startsWith(f.filename+'|'))return {...f,imageId:'invalid:'+f.candidate,attemptId:'',folder:'pending',technicalPassed:false};
+   if(matches.length!==1||matches[0][0]!==f.candidate||matches[0][7]!==f.driveFileId||!matches[0][1]?.startsWith(f.filename+'|'))return {...f,imageId:'invalid:'+f.candidate,attemptId:'',folder:'pending',technicalPassed:false,testFixture:true,scope:'isolated-test'};
    const row=matches[0];return {...f,imageId:row[1],attemptId:row[1],phrase:row[2]||'',folder:({['01_採用予定_TEST']:'adopt',['02_保留_TEST']:'hold'})[row[8]]||'pending',technicalPassed:false,testFixture:true,scope:'isolated-test',rating:null,confirmed:false,comment:'',sourceRating:row[3]||'',sourceConfirmed:row[4]||''};
   });
   const results=[];
