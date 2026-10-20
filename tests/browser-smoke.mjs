@@ -1,4 +1,5 @@
 import { chromium } from 'playwright';
+import { mkdir } from 'node:fs/promises';
 const pages=['sticker-selector-v9-nine-reject-test.html','sticker-selector-v9-resume-test.html'];
 const browser=await chromium.launch({headless:true});
 let errors=0;
@@ -24,7 +25,7 @@ for(const file of pages){
   if(!after.items.some(x=>x.name==='ui-smoke.png'&&x.rating==='h'&&x.touched))throw Error('Selection disappeared on reload');
   if(issues.length)throw Error('Browser exceptions: '+issues.join('; '));
   console.log('PASS',file,'load/import/rating/reload');
- }catch(e){console.error('FAIL',file,e.message,issues);errors++}
+ }catch(e){console.error('FAIL',file,e.message,issues);errors++;await mkdir('test-results',{recursive:true});await page.screenshot({path:'test-results/'+file+'.png',fullPage:true}).catch(()=>{})}
  finally{await page.close()}
 }
 await browser.close();
