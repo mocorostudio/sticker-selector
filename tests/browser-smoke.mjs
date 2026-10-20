@@ -8,8 +8,7 @@ for(const file of pages){
  page.on('pageerror',e=>issues.push(e.message));
  try{
   await page.goto('file://'+process.cwd()+'/'+file);
-  await page.locator('#status').waitFor();
-  await page.waitForTimeout(400);
+  await page.waitForFunction(()=>document.querySelector('#status')?.textContent?.includes('表示'),{timeout:10000});
   if(await page.locator('#files').count()!==1)throw Error('PNG input missing');
   if(await page.locator('#oneStep').count()!==1)throw Error('Sync button missing');
   // A harmless generated one-pixel PNG exercises import, rating and persistence.
