@@ -1,13 +1,14 @@
 import { chromium,webkit } from 'playwright';
 import assert from 'node:assert/strict';
-import {mkdir} from 'node:fs/promises';
+import JSZip from 'jszip';
+import {readFile,mkdir} from 'node:fs/promises';
 import {startServer} from './server.mjs';
 import {png} from './mock-drive.mjs';
 const service=await startServer();
 let failed=0,passed=0;
 async function scenario(browser,name,fn){service.reset();const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
  // Network allowlist: tests cannot contact Google or any external host.
- await context.route('**/*',r=>new URL(r.request().url()).origin===service.url?r.continue():r.abort());
+ await context.route('**/*',async r=>{if(r.request().url()==='https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js')return r.fulfill({contentType:'text/javascript',body:await readFile('node_modules/jszip/dist/jszip.min.js')});return new URL(r.request().url()).origin===service.url?r.continue():r.abort()});
  page.on('dialog',d=>d.accept());
  try{await page.goto(service.url+'/?mock=1');await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('表示'));await fn(page);assert.deepEqual(errors,[]);console.log('PASS',name);passed++}
  catch(e){failed++;console.error('FAIL',name,e);await mkdir('test-results',{recursive:true});await page.screenshot({path:'test-results/'+name.replaceAll(/[^\w-]/g,'_')+'.png',fullPage:true}).catch(()=>{})}
@@ -54,6 +55,19 @@ try{for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]){
   assert.equal(await page.locator('.card').count(),1);assert.equal(await page.locator('.chosen').textContent(),'△');
   const before=await page.evaluate(()=>JSON.parse(localStorage.getItem('sticker-selector-v9')).items[0].id);
   await page.reload();await page.locator('.card').waitFor();const after=await page.evaluate(()=>JSON.parse(localStorage.getItem('sticker-selector-v9')).items[0].id);assert.equal(before,after);
+ });
+ await scenario(browser,engine+' 130-PNG ZIP import/reimport/export',async page=>{
+  const zip=new JSZip();for(let i=0;i<130;i++)zip.file('set/ZIP'+i+'.png',png);zip.file('set/bad.png','broken image');
+  const buffer=await zip.generateAsync({type:'nodebuffer'});
+  await page.locator('summary').click();await page.locator('#files').setInputFiles({name:'batch.zip',mimeType:'application/zip',buffer});
+  await page.waitForFunction(()=>document.querySelectorAll('.card').length===130,{},{timeout:30000});
+  assert.match(await page.locator('#error').textContent(),/bad.png/);
+  await page.locator('.card').nth(129).locator('.choices label').nth(2).click();
+  await page.locator('#files').setInputFiles({name:'batch.zip',mimeType:'application/zip',buffer});
+  await page.waitForFunction(()=>!document.querySelector('#files').disabled,{},{timeout:30000});
+  assert.equal(await page.locator('.card').count(),130);assert.equal(await page.locator('.chosen').textContent(),'✕');
+  const [download]=await Promise.all([page.waitForEvent('download'),page.locator('#json').click()]);
+  const data=JSON.parse(await readFile(await download.path(),'utf8'));assert.equal(data.items.length,130);assert.equal(data.items.filter(x=>x.confirmed).length,1);assert.equal(data.drive_synced,false);
  });
  }finally{await browser.close()}
 }}finally{await new Promise(resolve=>service.server.close(resolve))}

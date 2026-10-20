@@ -1,4 +1,4 @@
-export const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRfkAAAAASUVORK5CYII=','base64');
+export const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAACgAAAAoCAYAAACM/rhtAAAA30lEQVR4nO2Y0Q2CQAyGq0PhLDqMBIfBWXApfSIxpO21vbYK6fdEQvr3o8cBAaAoCpaTR8hwv76pc6/Hs6uHuZiTorDIqgssYls0omdNsIecNkcs6CWnzRMJestpcpuCUXLSfFYwWk7SR7VJVpZphmWaw2sAGEHqqr6bSBtKaqh+pglmoha8jDf02LtmBX2iZ20OjO1b5nhLnE0J9lKCvaCCvZ/pVrC++5zgP0EKZi8z1W+/EwTImyLXpznBaMlWvmiJoyQlueJ70FtSmqfaJF6Smpzj/ZvBiPy7VRS/5gO3v1/hZ4NavQAAAABJRU5ErkJggg==','base64');
 export function fixture(count=3){return Array.from({length:count},(_,i)=>({candidate:'D'+String(i+1).padStart(2,'0'),imageId:'image-'+i,attemptId:'attempt-1',driveFileId:'file-'+i,filename:'TEST'+i+'.png',technicalPassed:true,folder:'pending',rating:null,confirmed:false,comment:''}))}
 export class MemoryDrive {
  mode='mock';events=new Map();calls=[];fail=null;

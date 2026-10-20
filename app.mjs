@@ -69,7 +69,7 @@ openDb().then(redraw).catch(e=>$('error').textContent='端末内画像を読み�
 
 const adapter=new URLSearchParams(location.search).get('mock')==='1'?new MockDriveAdapter():null;
 let busy=false;
-async function withBusy(fn){if(busy)return;busy=true;document.querySelectorAll('button,input,select').forEach(x=>x.disabled=true);try{await fn()}catch(e){$('error').textContent=e.message}finally{busy=false;document.querySelectorAll('button,input,select').forEach(x=>x.disabled=false)}}
+async function withBusy(fn){if(busy)return;busy=true;$('list').inert=true;document.querySelectorAll('button,input,select').forEach(x=>x.disabled=true);try{await fn()}catch(e){$('error').textContent=e.message}finally{busy=false;$('list').inert=false;document.querySelectorAll('button,input,select').forEach(x=>x.disabled=false)}}
 function driveMessage(message){$('driveStatus').textContent=message}
 $('loadPending').onclick=()=>withBusy(async()=>{
  if(!adapter){driveMessage('実Drive連携は未有効です。PNG・ZIPの選抜は補助機能から利用できます。');return}
