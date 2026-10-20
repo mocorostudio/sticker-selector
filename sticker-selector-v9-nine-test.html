@@ -272,7 +272,7 @@ $('oneStep').onclick=async()=>{
   const token=await googleTokenForMove(),data=await sheets(token,'GET','A1:J1000'),rows=data.values||[];
   if(rows[0]?.[1]!=='画像ID'||rows[0]?.[7]!=='DriveファイルID')throw Error('マスターの列構成が違います');
   const registry=rows.slice(1).map((c,i)=>({c,n:i+2})).filter(x=>x.c[1]&&x.c[7]);
-  if(new Set(registry.map(x=>x.c[1])).size!==registry.length)throw Error('マスター内の画像ID重複');
+  if(new Set(registry.filter(x=>x.c[1]!=='未登録').map(x=>x.c[1])).size!==registry.filter(x=>x.c[1]!=='未登録').length)throw Error('マスター内の画像ID重複');
   const map=new Map(selected.map(x=>[x.id,x]));
   if(map.size!==selected.length)throw Error('選抜画像ID重複');
   const entries=registry.filter(r=>map.has(r.c[1])||(r.c[1]==='未登録'&&selected.some(i=>i.name==='v9_test_'+r.c[0].slice(-2)+'.png')));
