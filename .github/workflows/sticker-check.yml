@@ -23,3 +23,10 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Browser startup smoke test
         run: node tests/browser-smoke.mjs
+      - name: Save screenshots when browser test fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sticker-browser-failure
+          path: test-results/
+          if-no-files-found: ignore
