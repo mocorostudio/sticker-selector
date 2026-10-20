@@ -8,14 +8,14 @@ for(const file of pages){
  page.on('pageerror',e=>issues.push(e.message));
  try{
   await page.goto('file://'+process.cwd()+'/'+file);
-  await page.waitForFunction(()=>document.querySelector('#status')?.textContent?.includes('表示'),{timeout:10000});
+  await page.waitForFunction(()=>document.querySelector('#status')?.textContent?.includes('表示'));
   if(await page.locator('#files').count()!==1)throw Error('PNG input missing');
   if(await page.locator('#oneStep').count()!==1)throw Error('Sync button missing');
   // A harmless generated one-pixel PNG exercises import, rating and persistence.
   const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRfkAAAAASUVORK5CYII=','base64');
   await page.locator('#files').setInputFiles({name:'ui-smoke.png',mimeType:'image/png',buffer:png});
   await page.locator('#list .card').first().waitFor();
-  await page.locator('#list .card').first().locator('input[value="h"]').check({force:true});
+  await page.locator('#list .card').first().locator('.choices label').nth(1).click();
   const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('sticker-selector-v9')));
   if(!state.items.some(x=>x.name==='ui-smoke.png'&&x.rating==='h'&&x.touched))throw Error('Selection was not persisted');
   await page.reload();
