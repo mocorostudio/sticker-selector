@@ -17,6 +17,8 @@ jobs:
           node-version: '22'
       - name: Check HTML JavaScript and essential UI
         run: node tests/check-stickers.mjs
+      - name: Offline sync contract tests
+        run: node --test tests/sync-contract.test.mjs
       - name: Install Playwright and Chromium
         run: |
           npm install --no-save playwright
