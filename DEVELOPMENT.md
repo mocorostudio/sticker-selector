@@ -10,7 +10,7 @@ The primary phone actions are **未選抜を読み込む** and **選抜確定・
 
 ## Safe development transport
 
-This build intentionally has **no enabled real Drive write transport**. The default UI explains that real Drive integration is unavailable; local PNG/ZIP selection works. For a functional mock preview:
+The ordinary entry point has **no enabled real Drive write transport**. The isolated `?drive=test` entry is described below. The default UI explains that real Drive integration is unavailable; local PNG/ZIP selection works. For a functional mock preview:
 
 ```sh
 npm ci
@@ -40,9 +40,29 @@ CI runs on pushes to development and on PRs. Playwright uses a 390×844 touch vi
 
 ## Remaining integration work
 
-- Implement and independently test a real Drive/Sheets adapter with an explicit target allowlist, conditional writes and remote event uniqueness; reconnect OAuth and real read-only loading. The earlier test-page REST writes were not carried into the supported entry point because they lacked this contract.
+- Validate the new isolated real Drive adapter against Google after preview hosting and OAuth origin setup. Production adapters, mutable master updates and distributed conditional writes remain out of scope.
 - Map the live v9 animal master schema and technical-pass evidence before connecting real PNGs. The supplied v3 workbook was inspected read-only: it contains 116 candidates and history templates, but it does not establish live v9 image/Drive IDs, attempt mappings or technical approvals. No personal workbook contents are committed.
 - Test real Google authorization, access limits and readback using isolated test folders before production activation. Production testing requires separately authorized scope.
 - Add cross-device conflict handling before enabling a real adapter. Current UI prevents overlap in the same page; the mock journal is not a production distributed lock.
 - Check physical iPhone Safari and storage eviction behavior. Export JSON regularly; browser storage is not a durable backup.
 - ZIP parsing depends on pinned JSZip 3.10.1 from a CDN in the UI. CI supplies identical local bytes; offline ZIP import and ZIP expansion limits remain to be improved.
+
+## 2026-10-20: isolated real Drive connection
+
+`/?drive=test` now enables `GoogleTestDriveAdapter` and Google Identity Services. The ordinary URL still has no real Drive transport. The scope is `drive` because these pre-existing test files must be read and moved; the app itself enforces a fixed three-PNG allowlist, a fixed test root, and three verified test subfolders. No arbitrary file/folder configuration is accepted. OAuth client ID is public; access tokens remain in closure memory and are never stored or exported. The disconnect control clears the in-memory token.
+
+The three fixtures already have legacy evaluations. This screen deliberately permits their re-evaluation as synthetic test data, and labels the action **テスト画像を読み込む**. It does not mark test PNGs as production technical passes. The technical gate permits only an explicit isolated-test fixture flag on this test adapter; ordinary uninspected PNGs still fail.
+
+Legacy test master A:J and its previous evaluation history are read-only in this adapter. New evaluations are independent JSON records in the existing test root. Every operation has immutable `prepared`, `result`, and `complete` files. Pre-generated Drive file IDs and the exact pending request payload are saved locally before upload. A lost response retries the reserved file ID and verifies its bytes; HTTP 409 is reconciled by reading that ID. No JSON or PNG is deleted or replaced. The `result` files provide the separate test evaluation state; connecting production master updates remains out of scope.
+
+Browser Web Locks prevent two tabs in the same origin from synchronizing simultaneously. This does **not** provide a distributed lock across devices: use a single device for the real test. Concurrent real users and production conflict resolution remain unsupported. Lost browser storage plus delayed Drive search may still require manual reconciliation; do not discard browser data during an unfinished upload.
+
+Additional automated coverage uses a REST-shaped Google fixture with the same endpoints, metadata/ancestry checks, multipart uploads, reserved IDs, HTTP 409 recovery, independent journals and legacy master preservation. Browser tests stub Google's consent callback and intercept Google API calls, so these tests cannot be reported as real Google authorization or real API writes.
+
+### iPhone test entry and hosting prerequisite
+
+1. Serve the development tree on a dedicated development URL. `main` and the existing production Pages deployment must remain unchanged.
+2. The development URL's HTTPS origin must be listed in this OAuth client's authorized JavaScript origins. Same-origin module loading and the Google Identity script must be allowed. An arbitrary shared raw-file viewer is not a suitable OAuth host.
+3. Open `index.html?drive=test` in Safari. Read the scope, authorize Google, load the three synthetic images, choose ratings, and explicitly confirm sync. Verify the displayed counts and the independent test journal, then retry to confirm no duplicates.
+
+A separate preview host and its OAuth origin configuration are not created by this commit. The existing production Pages origin cannot expose this development branch without changing its deployment. Actual login, browser-to-Google communication and physical iPhone behavior remain unverified until the isolated preview is available.

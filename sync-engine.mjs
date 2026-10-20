@@ -1,7 +1,7 @@
 import {planSelection} from './selection-core.mjs';
 export function assertIdentity(record,file){
  if(!record.imageId||!record.candidate||!record.attemptId||!record.driveFileId)throw Error('画像・候補・試行ID不足');
- if(record.technicalPassed!==true)throw Error('技術検品未合格');
+ if(record.technicalPassed!==true&&!(record.testFixture===true&&record.scope==='isolated-test'))throw Error('技術検品未合格');
  if(file.id!==record.driveFileId||file.name!==record.filename||file.mimeType!=='image/png'||file.trashed)throw Error('実PNG不一致');
  if(!['pending','adopt','hold','reject'].includes(file.folder))throw Error('保存先不一致');
 }

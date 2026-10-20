@@ -1,3 +1,5 @@
+import {GoogleTestDriveAdapter} from './google-test-drive.mjs';
+import {googleTestAuth} from './google-auth.mjs';
 import {MockDriveAdapter} from './drive-adapter.mjs';
 import {syncSelections,assertIdentity} from './sync-engine.mjs';
 
@@ -74,18 +76,20 @@ $('csv').onclick=()=>{const rows=[['image_id','candidate_id','attempt_id','drive
 // Do not write state on initial page load: preserve original v9 localStorage content.
 openDb().then(redraw).catch(e=>$('error').textContent='端末内画像を読み込めません：'+errorText(e));
 
-const adapter=new URLSearchParams(location.search).get('mock')==='1'?new MockDriveAdapter():null;
+const params=new URLSearchParams(location.search);
+const auth=params.get('drive')==='test'?googleTestAuth():null;
+const adapter=auth?new GoogleTestDriveAdapter({getToken:auth.getToken}):params.get('mock')==='1'?new MockDriveAdapter():null;
 let busy=false;
 async function withBusy(fn){if(busy)return;busy=true;$('list').inert=true;document.querySelectorAll('button,input,select').forEach(x=>x.disabled=true);try{await fn()}catch(e){$('error').textContent=errorText(e)}finally{busy=false;$('list').inert=false;document.querySelectorAll('button,input,select').forEach(x=>x.disabled=false)}}
 function driveMessage(message){$('driveStatus').textContent=message}
 $('loadPending').onclick=()=>withBusy(async()=>{
  if(!adapter){driveMessage('実Drive連携は未有効です。PNG・ZIPの選抜は補助機能から利用できます。');return}
  const records=await adapter.list(),ids=[],errors=[];
- for(const r of records.filter(x=>x.folder==='pending'&&!x.confirmed)){
+ for(const r of records.filter(x=>adapter.mode==='drive-test' ? x.testFixture&&!x.confirmed : x.folder==='pending'&&!x.confirmed)){
   try{
    if(records.filter(x=>x.imageId===r.imageId||x.driveFileId===r.driveFileId).length!==1)throw Error('重複する画像ID・Drive ID');
    const file=await adapter.metadata(r.driveFileId);assertIdentity(r,file);
-   if(file.folder!=='pending')throw Error('選抜待ち以外のPNG');
+   if(adapter.mode!=='drive-test'&&file.folder!=='pending')throw Error('選抜待ち以外のPNG');
    const blob=await adapter.image(r.driveFileId);await validatePNG(blob);
    const old=state.items.find(x=>x.id===r.imageId);
    if(old&&(old.candidate!==r.candidate||old.attemptId!==r.attemptId||old.driveFileId!==r.driveFileId))throw Error('保存済みID不一致');
@@ -103,9 +107,11 @@ $('sync').onclick=()=>withBusy(async()=>{
  if(!selected.length){driveMessage('対象の評価済み画像がありません。初期◯は未選抜です。');return}
  // Capture choices before asynchronous operations; no mutable UI state enters a request.
  const choices=selected.map(x=>({imageId:x.imageId,candidate:x.candidate,attemptId:x.attemptId,rating:x.rating,comment:x.comment||'',touched:x.touched,revision:x.revision,evaluatedAt:x.evaluatedAt}));
- if(!confirm(choices.length+'枚の選抜を確定して模擬Driveへ同期します。✕のPNGは移動・削除しません。'))return;
+ if(!confirm(choices.length+'枚の選抜を確定して'+(adapter.mode==='drive-test'?'テスト用Google Drive':'模擬Drive')+'へ同期します。✕のPNGは移動・削除しません。'))return;
  driveMessage('同期中…');
- const result=await syncSelections(adapter,choices,{confirmed:true});
+ const run=()=>syncSelections(adapter,choices,{confirmed:true});
+ const result=await (adapter.confirmRun?adapter.confirmRun(run):run());
  driveMessage('同期 '+result.saved.length+'件／一致 '+result.unchanged.length+'件／失敗 '+result.errors.length+'件'+(result.errors.length?'\n'+result.errors.map(x=>x.imageId+': '+x.message).join('\n'):''));
 });
-if(adapter)$('mode').textContent='模擬Driveモード：本番データには接続しません';
+if(adapter)$('mode').textContent=adapter.mode==='drive-test'?'実Driveテスト：既存のテストPNG3枚のみ。制作用データは対象外です。':'模擬Driveモード：本番データには接続しません';
+if(auth){$('loadPending').textContent='テスト画像を読み込む';$('disconnect').hidden=false;$('disconnect').onclick=()=>{auth.disconnect();driveMessage('Google接続を端末内で解除しました。画像と評価は保持しています。')};auth.ready.then(()=>driveMessage('Google認証の準備ができました。「テスト画像を読み込む」を押してください。')).catch(e=>driveMessage(errorText(e)));}

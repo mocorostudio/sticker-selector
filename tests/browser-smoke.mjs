@@ -1,3 +1,4 @@
+import {GoogleRestFixture} from './google-drive-fixture.mjs';
 import { chromium,webkit } from 'playwright';
 import assert from 'node:assert/strict';
 import JSZip from 'jszip';
@@ -6,11 +7,13 @@ import {startServer} from './server.mjs';
 import {png} from './mock-drive.mjs';
 const service=await startServer();
 let failed=0,passed=0;
-async function scenario(browser,name,fn){service.reset();const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});const page=await context.newPage(),errors=[];page.setDefaultTimeout(10000);const unused=[];page.on('pageerror',e=>errors.push(e.message));
+async function scenario(browser,name,fn){service.reset();const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});const page=await context.newPage(),errors=[];page.setDefaultTimeout(10000);const rest=new GoogleRestFixture();page.on('pageerror',e=>errors.push(e.message));
  // Network allowlist: tests cannot contact Google or any external host.
- await context.route('**/*',async r=>{if(r.request().url()==='https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js')return r.fulfill({contentType:'text/javascript',body:await readFile('node_modules/jszip/dist/jszip.min.js')});return new URL(r.request().url()).origin===service.url?r.continue():r.abort()});
+ await context.route('**/*',async r=>{if(r.request().url()==='https://accounts.google.com/gsi/client')return r.fulfill({contentType:'text/javascript',body: `window.google={accounts:{oauth2:{initTokenClient:options=>({requestAccessToken:()=>options.callback({access_token:'test-token',expires_in:3600})})}}}`});
+ if(['https://www.googleapis.com','https://sheets.googleapis.com'].includes(new URL(r.request().url()).origin)){const request=r.request();const response=await rest.fetch(request.url(),{method:request.method(),headers:{Authorization:request.headers()['authorization'],'Content-Type':request.headers()['content-type']},body:request.postData()});return r.fulfill({status:response.status,headers:Object.fromEntries(response.headers.entries()),body:Buffer.from(await response.arrayBuffer())})}
+ if(r.request().url()==='https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js')return r.fulfill({contentType:'text/javascript',body:await readFile('node_modules/jszip/dist/jszip.min.js')});return new URL(r.request().url()).origin===service.url?r.continue():r.abort()});
  page.on('dialog',d=>d.accept());
- try{await page.goto(service.url+'/?mock=1');await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('表示'));await fn(page);assert.deepEqual(errors,[]);console.log('PASS',name);passed++}
+ try{await page.goto(service.url+(name.includes('Google REST')?'/?drive=test':'/?mock=1'));await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('表示'));await fn(page,rest);assert.deepEqual(errors,[]);console.log('PASS',name);passed++}
  catch(e){failed++;console.error('FAIL',name,e,'UI:',await page.locator('#error').textContent(),await page.locator('#driveStatus').textContent());await mkdir('test-results',{recursive:true});await page.screenshot({path:'test-results/'+name.replaceAll(/[^\w-]/g,'_')+'.png',fullPage:true}).catch(()=>{})}
  finally{await context.close()}}
 try{for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]){
@@ -68,6 +71,21 @@ try{for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]){
   assert.equal(await page.locator('.card').count(),130);assert.equal(await page.locator('.chosen').textContent(),'✕');
   const [download]=await Promise.all([page.waitForEvent('download'),page.locator('#json').click()]);
   const data=JSON.parse(await readFile(await download.path(),'utf8'));assert.equal(data.items.length,130);assert.equal(data.items.filter(x=>x.confirmed).length,1);assert.equal(data.drive_synced,false);
+ });
+ await scenario(browser,engine+' Google REST OAuth/read/sync/reload',async(page,rest)=>{
+  await page.waitForFunction(()=>document.querySelector('#driveStatus').textContent.includes('Google認証の準備'));
+  assert.equal(rest.writes().length,0);
+  await page.locator('#loadPending').click();await page.waitForFunction(()=>document.querySelectorAll('.card').length===3);
+  assert.equal(rest.writes().length,0);
+  await page.waitForFunction(()=>[...document.querySelectorAll('.stage img')].every(x=>x.complete&&x.naturalWidth>0));
+  for(let i=0;i<3;i++)await page.locator('.card').nth(i).locator('.choices label').nth(i).click();
+  assert.equal(rest.writes().length,0);
+  await page.locator('#sync').click();await page.waitForFunction(()=>document.querySelector('#driveStatus').textContent.includes('同期 3件／一致 0件／失敗 0件'));
+  assert.equal([...rest.files.values()].filter(f=>f.data).length,9);
+  assert.equal(await page.evaluate(()=>JSON.stringify(localStorage).includes('test-token')),false);
+  await page.reload();await page.locator('.card').first().waitFor();await page.locator('#sync').click();
+  await page.waitForFunction(()=>document.querySelector('#driveStatus').textContent.includes('同期 0件／一致 3件／失敗 0件'));
+  assert.equal([...rest.files.values()].filter(f=>f.data).length,9);
  });
  }finally{await browser.close()}
 }}finally{await new Promise(resolve=>service.server.close(resolve))}
