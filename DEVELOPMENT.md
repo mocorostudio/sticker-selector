@@ -76,3 +76,21 @@ Real Drive test mode now uses dedicated localStorage, visible-ID and IndexedDB n
 Synchronization now reports per-image progress. Within one confirmed run, immutable journal bytes are reused only after actual readback; verified static folder/master reads are also reused. Every run starts fresh and releases the cache afterward. PNG metadata and actual upload readbacks remain checked, and retry/fault tests remain required. This reduces repeated Google reads without treating unverified work as complete.
 
 Browser regression tests seed 39 legacy records, including the exact conflicting image ID, and verify that old ratings remain byte-for-byte unchanged, unrelated images stay out of the test view, valid drafts are recovered, and PNGs decode successfully. Physical-device confirmation of the revised screen remains a separate check after deployment.
+
+## 2026-10-23: autonomous quality audit
+
+Source of truth read: Drive `制作ルール_最新版_v9` (document
+`1F2Vw1vMbnOaPjNugM42R72Iw3IfUbqITT14qgeNiQC4`). Baseline: `ec845ff`.
+
+Fixed:
+- Failed/unsupported-only imports preserve the current visible selection instead of hiding it.
+- Reimport restores missing IndexedDB bytes for a known content ID, retaining ratings and identities.
+- Async import/read operations wait for IndexedDB initialization.
+- Isolated-test fixture exemptions require the test adapter explicitly; flags alone cannot bypass the technical gate in production.
+- Ordinary local mode opens PNG/ZIP import directly and hides unavailable Drive sync; real-test/mock controls remain available.
+
+Validation: module/redirect checks and all 39 Node tests pass. Added Chromium/WebKit regression scenarios for failed imports and missing-byte recovery. Browser execution in this environment is blocked: Playwright's browser download repeatedly returned invalid/truncated ZIPs. These scenarios are not claimed passed until CI runs. Physical iPhone, real OAuth, and real Drive writes were not exercised in this audit.
+
+Functional gaps in this development branch: no cutting, transparency conversion, pixel-based technical inspection, production Drive PNG upload, or final application-set selection. Local PNG decoding is format validation, not technical approval. Production master updates and final submission remain unimplemented. No production data or masters were modified. Main and the separate preview repository were not deployed.
+
+UX findings: unavailable default actions corrected; JSON/CSV remain in details. Bulk selection still requires explicit confirmation. Cutting-screen complaints from other builds cannot be reproduced here because no cutting screen exists at this branch head. This discrepancy must be reconciled before calling this an integrated end-to-end build.

@@ -70,6 +70,26 @@ try{for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]){
   const before=await page.evaluate(()=>JSON.parse(localStorage.getItem('sticker-selector-v9')).items[0].id);
   await page.reload();await page.locator('.card').waitFor();const after=await page.evaluate(()=>JSON.parse(localStorage.getItem('sticker-selector-v9')).items[0].id);assert.equal(before,after);
  });
+ await scenario(browser,engine+' failed import preserves view and missing image can be restored',async page=>{
+  await page.locator('summary').click();
+  const good={name:'restore.png',mimeType:'image/png',buffer:png};
+  await page.locator('#files').setInputFiles(good);
+  await page.locator('.card').waitFor();
+  await page.locator('.choices label').nth(1).click();
+  await page.locator('#files').setInputFiles({name:'bad.png',mimeType:'image/png',buffer:Buffer.from('bad')});
+  await page.waitForFunction(()=>!document.querySelector('#files').disabled);
+  assert.equal(await page.locator('.card').count(),1);
+  assert.equal(await page.locator('.chosen').textContent(),'△');
+  await page.evaluate(()=>new Promise((resolve,reject)=>{
+   const q=indexedDB.open('sticker-selector-images-v9',1);
+   q.onsuccess=()=>{const db=q.result,tx=db.transaction('images','readwrite');tx.objectStore('images').clear();tx.oncomplete=()=>{db.close();resolve()};tx.onerror=()=>reject(tx.error)};
+  }));
+  await page.reload();await page.locator('.card').waitFor();
+  await page.waitForFunction(()=>document.querySelector('.card small').textContent.includes('再追加'));
+  await page.locator('summary').click();await page.locator('#files').setInputFiles(good);
+  await page.waitForFunction(()=>document.querySelector('.stage img').naturalWidth>0);
+  assert.equal(await page.locator('.chosen').textContent(),'△');
+ });
  await scenario(browser,engine+' 130-PNG ZIP import/reimport/export',async page=>{
   const zip=new JSZip();for(let i=0;i<130;i++)zip.file('set/ZIP'+i+'.png',png);zip.file('set/bad.png','broken image');
   const buffer=await zip.generateAsync({type:'nodebuffer'});
