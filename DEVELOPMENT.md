@@ -94,3 +94,45 @@ Validation: module/redirect checks and all 39 Node tests pass. Added Chromium/We
 Functional gaps in this development branch: no cutting, transparency conversion, pixel-based technical inspection, production Drive PNG upload, or final application-set selection. Local PNG decoding is format validation, not technical approval. Production master updates and final submission remain unimplemented. No production data or masters were modified. Main and the separate preview repository were not deployed.
 
 UX findings: unavailable default actions corrected; JSON/CSV remain in details. Bulk selection still requires explicit confirmation. Cutting-screen complaints from other builds cannot be reproduced here because no cutting screen exists at this branch head. This discrepancy must be reconciled before calling this an integrated end-to-end build.
+
+## 2026-10-23: recovered integration audit
+
+The integrated application was found in a different repository:
+`mocorostudio/sticker-selector-dev`, branch `development`, commit `5158976`.
+Its `integration-v1/` tree is now preserved here as a separate entry point,
+`integration-v1/workflow.html`; the existing root selection app stays intact.
+The preview repository and its deployed branch have not been modified by this audit.
+No browser storage, production PNG, evaluation history or master was deleted or migrated.
+Paths scope browser storage: this new repository path does not automatically load the
+preview repository's existing drafts. Continue using the existing URL for old drafts.
+
+Fixes in the recovered tree:
+- New batches obey the visible-image filter. First-batch replacement and later batch
+  append are explicit, retaining all prior PNGs/votes without mixing old dogs into a new batch.
+- Reimport restores missing PNG bytes and invalid-only imports preserve the view.
+- Saved local confirmations must match the current rating AND comment, not merely a revision.
+- Existing handoff identities also verify the pose.
+- Retries use only latest attempts; superseded failures cannot be retried indefinitely.
+- Adopted/held PNG export requires technical approval and rechecks actual pixels.
+  Uninspected drafts cannot be uploaded as adopted/held PNGs. Empty candidate phrases
+  cannot establish a technical pass. Prepared cache reuse rechecks attempt-specific evidence.
+- Newly exported approved PNGs carry a technical-pass marker; submission planning and
+  transport both reject files without that marker before moving anything.
+- Removed the destructive reset button from this audited copy. New-batch filtering
+  preserves past work instead of requiring a reset.
+
+Outstanding v9 mismatch: the recovered UI intentionally sends uninspected images into
+LOCAL draft voting. It does not provide the complete candidate/visual-review controls
+needed to establish a formal technical pass. Draft votes remain available, but export
+now stops these images. The current crop UI therefore cannot complete a compliant
+production workflow yet. Live per-character v9 master lookup, full technical-review UI,
+verified 00_選抜待ち registration and cross-device conflict handling remain unresolved.
+Historical Drive files without the new approval marker remain untouched and cannot be
+promoted to submission by this audited build. They require evidence reconciliation.
+
+Validation: 50 Node tests, recursive module syntax checks and nine Chromium phone
+scenarios passed. The integrated Chromium scenario uses a synthetic 3x3 transparent
+source and checks cutting to nine decoded PNGs, local draft voting/confirmation,
+reload retention, second-batch filtering with old votes retained, and navigation back to the crop editor. Google calls are blocked or
+intercepted with fixtures. Chromium 153 was provided through a temporary runtime;
+this is not physical iPhone Safari/WebKit or real OAuth/Drive testing. No paid API used.

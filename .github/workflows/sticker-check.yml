@@ -25,6 +25,8 @@ jobs:
         run: npx playwright install --with-deps chromium webkit
       - name: Phone browser workflows with isolated mock Drive
         run: node tests/browser-smoke.mjs
+      - name: Integrated crop and local selection workflow
+        run: npm run test:integration-browser
       - name: Save phone screenshots
         if: always()
         uses: actions/upload-artifact@v4
